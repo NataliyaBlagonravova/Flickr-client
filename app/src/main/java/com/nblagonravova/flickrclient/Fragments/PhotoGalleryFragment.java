@@ -22,6 +22,7 @@ import com.nblagonravova.flickrclient.Model.GalleryItem;
 import com.nblagonravova.flickrclient.Preferences.QueryPreferences;
 import com.nblagonravova.flickrclient.R;
 import com.nblagonravova.flickrclient.Services.PollService;
+import com.nblagonravova.flickrclient.listeners.EndlessRecyclerOnScrollListener;
 import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
@@ -32,7 +33,10 @@ public class PhotoGalleryFragment extends VisibleFragment {
     private static final String TAG = "PhotoGalleryFragment";
 
     private RecyclerView mPhotoRecyclerView;
+    private PhotoAdapter mPhotoAdapter;
     private List<GalleryItem> mItems = new ArrayList<>();
+
+    private int mCurrentPage = 1;
 
     public static PhotoGalleryFragment newInstance(){
         return new PhotoGalleryFragment();
@@ -43,9 +47,8 @@ public class PhotoGalleryFragment extends VisibleFragment {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
         setRetainInstance(true);
-        updateItems();
 
-        Log.i(TAG, "Background thread started");
+        updateItems();
     }
 
     @Nullable
@@ -53,19 +56,35 @@ public class PhotoGalleryFragment extends VisibleFragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_photo_gallery, container, false);
 
-        mPhotoRecyclerView = (RecyclerView) view.findViewById(R.id.fragment_photo_gallery_recycler_view);
-        mPhotoRecyclerView.setLayoutManager(new GridLayoutManager(getActivity(), 3));
+        mPhotoRecyclerView = (RecyclerView) view.findViewById(
+                R.id.fragment_photo_gallery_recycler_view);
+
+        GridLayoutManager gridLayoutManager = new GridLayoutManager(getActivity(), 3);
+        mPhotoRecyclerView.setLayoutManager(gridLayoutManager);
+        mPhotoRecyclerView.addOnScrollListener(new EndlessRecyclerOnScrollListener(
+                gridLayoutManager) {
+            @Override
+            public void onLoadMore(int currentPage) {
+                ++mCurrentPage;
+                updateItems();
+
+            }
+        });
         setAdapter();
         return view;
     }
 
     private void setAdapter() {
+        mPhotoAdapter = new PhotoAdapter(mItems);
+
         if (isAdded()){
-            mPhotoRecyclerView.setAdapter(new PhotoAdapter(mItems));
+            mPhotoRecyclerView.setAdapter(mPhotoAdapter);
         }
     }
 
-
+    private void updateRecyclerViewData(){
+        mPhotoAdapter.notifyDataSetChanged();
+    }
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
@@ -110,7 +129,7 @@ public class PhotoGalleryFragment extends VisibleFragment {
 
     private void updateItems() {
         String query = QueryPreferences.getStoreQuery(getActivity());
-        new FetchItemsTask(query).execute();
+        new FetchItemsTask(query).execute(mCurrentPage);
     }
 
     @Override
@@ -131,7 +150,7 @@ public class PhotoGalleryFragment extends VisibleFragment {
     }
 
 
-    private class FetchItemsTask extends AsyncTask<Void, Void, List<GalleryItem>> {
+    private class FetchItemsTask extends AsyncTask<Integer, Void, List<GalleryItem>> {
 
         private String mQuery;
 
@@ -140,10 +159,12 @@ public class PhotoGalleryFragment extends VisibleFragment {
         }
 
         @Override
-        protected List<GalleryItem> doInBackground(Void... params) {
+        protected List<GalleryItem> doInBackground(Integer... params) {
+
+            int page = params[0];
 
             if (mQuery == null) {
-                return new FlickrFetch().fetchRecentPhotos();
+                return new FlickrFetch().fetchRecentPhotos(page);
             } else {
                 return new FlickrFetch().searchPhotos(mQuery);
             }
@@ -152,8 +173,8 @@ public class PhotoGalleryFragment extends VisibleFragment {
 
         @Override
         protected void onPostExecute(List<GalleryItem> galleryItems) {
-            mItems = galleryItems;
-            setAdapter();
+            mItems.addAll(galleryItems);
+            updateRecyclerViewData();
         }
     }
 

@@ -66,8 +66,12 @@ public class FlickrFetch {
         return new String(getUrlBytes(urlSpec));
     }
 
-    private String bulldUrl(String method, String query){
+    private String bulldUrl(String method, String query, int page){
         Uri.Builder uriBilder = ENDPOINT.buildUpon().appendQueryParameter("method", method);
+        if (method.equals(FETCH_RECENTS_METHOD)){
+            uriBilder.appendQueryParameter("page", String.valueOf(page))
+                     .appendQueryParameter("per_page", "60");
+        }
         if (method.equals(SEARCH_METHOD)){
             uriBilder.appendQueryParameter("text", query);
         }
@@ -91,19 +95,15 @@ public class FlickrFetch {
         return items;
     }
 
-    public List<GalleryItem> fetchRecentPhotos(){
-        String url = bulldUrl(FETCH_RECENTS_METHOD, null);
+    public List<GalleryItem> fetchRecentPhotos(int page){
+        String url = bulldUrl(FETCH_RECENTS_METHOD, null, page);
         return downloadGalleryItems(url);
     }
 
     public List<GalleryItem> searchPhotos(String query){
-        String url = bulldUrl(SEARCH_METHOD, query);
+        String url = bulldUrl(SEARCH_METHOD, query, 0);
         return downloadGalleryItems(url);
     }
-
-
-
-
 
 
     private List<GalleryItem> parseItems(JSONObject jsonBody)
