@@ -33,6 +33,7 @@ public class FlickrFetch {
             .appendQueryParameter("format", "json")
             .appendQueryParameter("nojsoncallback", "1")
             .appendQueryParameter("extras", "url_s")
+            .appendQueryParameter("per_page", "60")
             .build();
 
     public byte[] getUrlBytes(String urlSpec) throws IOException{
@@ -67,11 +68,10 @@ public class FlickrFetch {
     }
 
     private String bulldUrl(String method, String query, int page){
-        Uri.Builder uriBilder = ENDPOINT.buildUpon().appendQueryParameter("method", method);
-        if (method.equals(FETCH_RECENTS_METHOD)){
-            uriBilder.appendQueryParameter("page", String.valueOf(page))
-                     .appendQueryParameter("per_page", "60");
-        }
+        Uri.Builder uriBilder = ENDPOINT.buildUpon()
+                .appendQueryParameter("method", method)
+                .appendQueryParameter("page", String.valueOf(page));
+
         if (method.equals(SEARCH_METHOD)){
             uriBilder.appendQueryParameter("text", query);
         }
@@ -100,8 +100,8 @@ public class FlickrFetch {
         return downloadGalleryItems(url);
     }
 
-    public List<GalleryItem> searchPhotos(String query){
-        String url = bulldUrl(SEARCH_METHOD, query, 0);
+    public List<GalleryItem> searchPhotos(String query, int page){
+        String url = bulldUrl(SEARCH_METHOD, query, page);
         return downloadGalleryItems(url);
     }
 

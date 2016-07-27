@@ -34,11 +34,14 @@ public class PhotoGalleryFragment extends VisibleFragment {
 
     private RecyclerView mPhotoRecyclerView;
     private PhotoAdapter mPhotoAdapter;
-    private List<GalleryItem> mItems = new ArrayList<>();
+    private EndlessRecyclerOnScrollListener listener;
+    GridLayoutManager mGridLayoutManager;
+    private List<GalleryItem> mItems;
+
 
     private int mCurrentPage = 1;
 
-    public static PhotoGalleryFragment newInstance(){
+    public static PhotoGalleryFragment newInstance() {
         return new PhotoGalleryFragment();
     }
 
@@ -48,7 +51,19 @@ public class PhotoGalleryFragment extends VisibleFragment {
         setHasOptionsMenu(true);
         setRetainInstance(true);
 
-        updateItems();
+        mGridLayoutManager = new GridLayoutManager(getActivity(), 3);
+
+        listener = new EndlessRecyclerOnScrollListener(mGridLayoutManager) {
+            @Override
+            public void onLoadMore() {
+                Log.d(TAG, "Need new page");
+                ++mCurrentPage;
+                updateItems(false);
+            }
+        };
+
+        mItems = new ArrayList<>();
+        updateItems(true);
     }
 
     @Nullable
@@ -59,31 +74,19 @@ public class PhotoGalleryFragment extends VisibleFragment {
         mPhotoRecyclerView = (RecyclerView) view.findViewById(
                 R.id.fragment_photo_gallery_recycler_view);
 
-        GridLayoutManager gridLayoutManager = new GridLayoutManager(getActivity(), 3);
-        mPhotoRecyclerView.setLayoutManager(gridLayoutManager);
-        mPhotoRecyclerView.addOnScrollListener(new EndlessRecyclerOnScrollListener(
-                gridLayoutManager) {
-            @Override
-            public void onLoadMore(int currentPage) {
-                ++mCurrentPage;
-                updateItems();
-
-            }
-        });
+        mPhotoRecyclerView.setLayoutManager(mGridLayoutManager);
+        mPhotoRecyclerView.addOnScrollListener(listener);
         setAdapter();
+
         return view;
     }
 
     private void setAdapter() {
-        mPhotoAdapter = new PhotoAdapter(mItems);
-
-        if (isAdded()){
+        if (mPhotoRecyclerView.getAdapter() == null && isAdded()) {
+            mPhotoAdapter = new PhotoAdapter(mItems);
             mPhotoRecyclerView.setAdapter(mPhotoAdapter);
         }
-    }
 
-    private void updateRecyclerViewData(){
-        mPhotoAdapter.notifyDataSetChanged();
     }
 
     @Override
@@ -99,7 +102,8 @@ public class PhotoGalleryFragment extends VisibleFragment {
             public boolean onQueryTextSubmit(String query) {
                 Log.d(TAG, "QueryTextSubmit: " + query);
                 QueryPreferences.setStoredQuery(getActivity(), query);
-                updateItems();
+                mCurrentPage = 1;
+                updateItems(true);
                 return true;
             }
 
@@ -120,24 +124,25 @@ public class PhotoGalleryFragment extends VisibleFragment {
         });
 
         MenuItem toggleItem = menu.findItem(R.id.menu_item_toggle_polling);
-        if (PollService.isServiceAlarmOn(getActivity())){
+        if (PollService.isServiceAlarmOn(getActivity())) {
             toggleItem.setTitle(R.string.stop_polling);
-        }else {
+        } else {
             toggleItem.setTitle(R.string.start_polling);
         }
     }
 
-    private void updateItems() {
+    private void updateItems(boolean isFirstPage) {
         String query = QueryPreferences.getStoreQuery(getActivity());
-        new FetchItemsTask(query).execute(mCurrentPage);
+        new FetchItemsTask(query, isFirstPage).execute(mCurrentPage);
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()){
+        switch (item.getItemId()) {
             case R.id.menu_item_clear:
                 QueryPreferences.setStoredQuery(getActivity(), null);
-                updateItems();
+                mCurrentPage = 1;
+                updateItems(true);
                 return true;
             case R.id.menu_item_toggle_polling:
                 boolean shouldStartAlarm = !PollService.isServiceAlarmOn(getActivity());
@@ -153,32 +158,43 @@ public class PhotoGalleryFragment extends VisibleFragment {
     private class FetchItemsTask extends AsyncTask<Integer, Void, List<GalleryItem>> {
 
         private String mQuery;
+        boolean isFirstPage;
+        int mPage;
 
-        public FetchItemsTask(String query) {
+        public FetchItemsTask(String query, boolean firstPage) {
             mQuery = query;
+            isFirstPage = firstPage;
         }
 
         @Override
         protected List<GalleryItem> doInBackground(Integer... params) {
 
-            int page = params[0];
+            mPage = params[0];
+
+            Log.d(TAG, "page = " + mPage);
 
             if (mQuery == null) {
-                return new FlickrFetch().fetchRecentPhotos(page);
+                Log.d(TAG, "find method");
+                return new FlickrFetch().fetchRecentPhotos(mPage);
             } else {
-                return new FlickrFetch().searchPhotos(mQuery);
+                Log.d(TAG, "search method");
+                return new FlickrFetch().searchPhotos(mQuery, mPage);
             }
         }
 
 
         @Override
         protected void onPostExecute(List<GalleryItem> galleryItems) {
-            mItems.addAll(galleryItems);
-            updateRecyclerViewData();
+            setAdapter();
+            if (isFirstPage) {
+                mPhotoAdapter.swap(galleryItems);
+            } else {
+                mPhotoAdapter.add(galleryItems);
+            }
         }
     }
 
-    private class PhotoHolder extends RecyclerView.ViewHolder{
+    private class PhotoHolder extends RecyclerView.ViewHolder {
 
         private ImageView mItemImageView;
         private GalleryItem mGalleryItem;
@@ -205,7 +221,7 @@ public class PhotoGalleryFragment extends VisibleFragment {
     }
 
 
-    private class PhotoAdapter extends RecyclerView.Adapter<PhotoHolder>{
+    private class PhotoAdapter extends RecyclerView.Adapter<PhotoHolder> {
 
         private List<GalleryItem> mGalleryItems;
 
@@ -230,7 +246,20 @@ public class PhotoGalleryFragment extends VisibleFragment {
         public int getItemCount() {
             return mGalleryItems.size();
         }
+
+        public void swap(List<GalleryItem> items) {
+            mGalleryItems.clear();
+            mGalleryItems.addAll(items);
+            notifyDataSetChanged();
+
+        }
+
+        public void add(List<GalleryItem> items) {
+            mGalleryItems.addAll(items);
+            notifyDataSetChanged();
+        }
     }
 
 
 }
+
